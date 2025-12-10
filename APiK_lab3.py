@@ -1,77 +1,139 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import math
 
-# --------------------------
-# Вхідні дані (варіант 18)
-# --------------------------
-lam = 0.031  # 3.1 см → 0.031 м
-ap = 0.10    # 10 см → 0.10 м ( H-площина )
-bp = 0.16    # 16 см → 0.16 м ( E-площина )
-k = 2 * np.pi / lam
+# Мої дані з варіанту №18
+lambda_wave = 3.1        # довжина хвилі, см
+a_p = 16                 # ширина розкриву (площина H), см
+b_p = 10                 # висота розкриву (площина E), см
 
-print("λ =", lam, "(м)")
-print("k =", k, "(рад/м)")
-print("a =", ap, "м")
-print("b =", bp, "м")
+# sinc-функція, щоб не було помилки при x=0
+def sinc(x):
+    return np.sinc(x / np.pi)
 
-# --------------------------
-# Розрахунок ДС
-# --------------------------
+# Елементний множитель (принцип Гюйгенса)
+def huygens_term(theta_deg):
+    theta_rad = np.deg2rad(theta_deg)
+    return (1 + np.cos(theta_rad)) / 2
 
-FH = []
-FE = []
-angles = []
+# Основна частина ДН в Е-площині
+def main_E(theta_deg):
+    theta_rad = np.deg2rad(theta_deg)
+    arg = np.pi * b_p * np.sin(theta_rad) / lambda_wave
+    return np.where(np.abs(arg) > 1e-10, sinc(arg), 1.0)
 
-SGP_H = 0
-SGP_E = 0
-val_H = 0
-val_E = 0
+# Повна ДН в Е-площині
+def F_E(theta_deg):
+    return main_E(theta_deg) * huygens_term(theta_deg)
 
-for theta in np.arange(0.0001, np.pi/2, 0.0005):
+# Основна частина ДН в Н-площині
+def main_H(theta_deg):
+    theta_rad = np.deg2rad(theta_deg)
+    arg_cos = np.pi * a_p * np.sin(theta_rad) / lambda_wave
+    arg_den = 2 * a_p * np.sin(theta_rad) / lambda_wave
+    cos_term = np.cos(arg_cos)
+    den = 1 - arg_den**2
+    return np.where(np.abs(den) > 1e-10, cos_term / den, 0.0)
 
-    FH_val = abs(np.sin((k * ap / 2) * np.sin(theta)) /
-                 ((k * ap / 2) * np.sin(theta)))
+# Повна ДН в Н-площині
+def F_H(theta_deg):
+    return main_H(theta_deg) * huygens_term(theta_deg)
 
-    FE_val = abs(np.sin((k * bp / 2) * np.sin(theta)) /
-                 ((k * bp / 2) * np.sin(theta)))
+# Нормування до максимуму (він завжди при θ = 0°)
+def normalize(F):
+    F_max = np.abs(F[theta >= 0][0])
+    return np.abs(F) / F_max
 
-    FH.append(FH_val)
-    FE.append(FE_val)
-    angles.append(np.degrees(theta))
+# Кут від 0 до 90° з кроком 0.1°
+theta = np.arange(0, 90.1, 0.1)
 
-    # Пошук ширини головної пелюстки
-    if 0.707 < FH_val < 0.708:
-        SGP_H = 2 * np.degrees(theta)
-        val_H = FH_val
+# Обчислення всіх кривих для Е-площини
+main_E_values = main_E(theta)
+huygens_values = huygens_term(theta)
+F_E_values = F_E(theta)
+F_E_norm = normalize(F_E_values)
 
-    if 0.707 < FE_val < 0.708:
-        SGP_E = 2 * np.degrees(theta)
-        val_E = FE_val
+# Те саме для Н-площини
+main_H_values = main_H(theta)
+F_H_values = F_H(theta)
+F_H_norm = normalize(F_H_values)
 
-# --------------------------
-# Вивід результатів
-# --------------------------
-print("Ширина головної пелюстки в H-площині =", round(SGP_H, 2), "°")
-print("Ширина головної пелюстки в E-площині =", round(SGP_E, 2), "°")
+# Нульові кути в Е-площині
+zeros_E = np.arcsin(np.arange(1, 5) * lambda_wave / b_p)
+zeros_E_deg = np.rad2deg(zeros_E[np.sin(zeros_E) <= 1])
 
-# --------------------------
-# Побудова графіка
-# --------------------------
-plt.figure(figsize=(10, 6))
-plt.plot(angles, FH, label="FH(θ) – H-площина", linewidth=1)
-plt.plot(angles, FE, label="FE(θ) – E-площина", linewidth=1)
+# Нульові кути в Н-площині
+zeros_H = np.arcsin((2 * np.arange(1, 4) + 1) * lambda_wave / (2 * a_p))
+zeros_H_deg = np.rad2deg(zeros_H[np.sin(zeros_H) <= 1])
 
-# Позначки ШГП
-plt.plot(SGP_H/2, val_H, 'ro', label="ШГП H")
-plt.plot(SGP_E/2, val_E, 'go', label="ШГП E")
+# Максимуми бокових пелюстків в Е-площині
+maxes_E = np.arcsin((2 * np.arange(1, 5) + 1) * lambda_wave / (2 * b_p))
+maxes_E_deg = np.rad2deg(maxes_E[np.sin(maxes_E) <= 1])
 
-plt.grid(True)
-plt.xlabel("θ (градуси)")
-plt.ylabel("Нормована ДС")
-plt.title("Нормовані ДС рупорної антени (варіант 18)")
-plt.legend()
-plt.xlim(0, 90)
-plt.ylim(0, 1.05)
+# Максимуми бокових пелюстків в Н-площині
+maxes_H = np.arcsin((np.arange(1, 4) + 1) * lambda_wave / a_p)
+maxes_H_deg = np.rad2deg(maxes_H[np.sin(maxes_H) <= 1])
+
+# Теоретичні рівні бокових пелюстків
+sidelobe_levels_E = [2 / ((2 * n + 1) * np.pi) for n in range(1, len(maxes_E_deg) + 1)]
+sidelobe_levels_H = [1 / (1 - (2 * (n + 1))**2) for n in range(1, len(maxes_H_deg) + 1)]
+
+# Графік для Е-площини
+fig_E, ax_E = plt.subplots(figsize=(8, 6))
+ax_E.plot(theta, F_E_norm, 'k-', label='|F_E(θ)|')
+ax_E.plot(theta, main_E_values / np.max(main_E_values), 'k--', label='|F(θ)|')
+ax_E.plot(theta, huygens_values / np.max(huygens_values), 'k-.', label='F_e(θ)')
+ax_E.set_xlabel('θ°')
+ax_E.set_ylabel('|F_E(θ)|')
+ax_E.set_title('ДС рупора 10×16×λ=3.1 см, Е-площина, варіант 18')
+ax_E.set_xlim(0, 90)
+ax_E.set_ylim(0, 1.1)
+ax_E.grid(False)
+
+# Лінія -3 дБ і рівні бокових пелюстків
+ax_E.axhline(0.5, color='k', linestyle='--', linewidth=0.5)
+for lvl in sidelobe_levels_E[:len(maxes_E_deg)]:
+    ax_E.axhline(lvl, color='k', linestyle='--', linewidth=0.5)
+
+# Червоні крапки — нулі, сині — максимуми бокових
+for z in zeros_E_deg:
+    ax_E.plot(z, 0, 'ro')
+    ax_E.text(z, -0.05, f'θ_{int(np.round(z)):02d}', ha='center', va='top', fontsize=8)
+for m in maxes_E_deg:
+    ax_E.plot(m, np.interp(m, theta, F_E_norm), 'bo')
+
+# Легенда + підписи кутів
+legend_labels = ['|F_E(θ)|', '|F(θ)|', 'F_e(θ)']
+legend_points = [f'θ_{int(np.round(z)):02d}={z:.2f}°' for z in zeros_E_deg] + [f'θ_m{int(np.round(m)):02d}={m:.2f}°' for m in maxes_E_deg]
+ax_E.legend(legend_labels + legend_points, loc='upper right')
+
+fig_E.savefig('APiK_lab3_var18__E_plane.png')
+
+# Графік для Н-площини
+fig_H, ax_H = plt.subplots(figsize=(8, 6))
+ax_H.plot(theta, F_H_norm, 'k-', label='|F_H(θ)|')
+ax_H.plot(theta, main_H_values / np.max(main_H_values), 'k--', label='|F(θ)|')
+ax_H.plot(theta, huygens_values / np.max(huygens_values), 'k-.', label='F_h(θ)')
+ax_H.set_xlabel('θ°')
+ax_H.set_ylabel('|F_H(θ)|')
+ax_H.set_title('ДС рупора 10×16×λ=3.1 см, H-площина, варіант 18')
+ax_H.set_xlim(0, 90)
+ax_H.set_ylim(0, 1.1)
+ax_H.grid(False)
+
+ax_H.axhline(0.5, color='k', linestyle='--', linewidth=0.5)
+for lvl in np.abs(sidelobe_levels_H[:len(maxes_H_deg)]):
+    ax_H.axhline(lvl, color='k', linestyle='--', linewidth=0.5)
+
+for z in zeros_H_deg:
+    ax_H.plot(z, 0, 'ro')
+    ax_H.text(z, -0.05, f'θ_{int(np.round(z)):02d}', ha='center', va='top', fontsize=8)
+for m in maxes_H_deg:
+    ax_H.plot(m, np.interp(m, theta, F_H_norm), 'bo')
+
+legend_labels = ['|F_H(θ)|', '|F(θ)|', 'F_h(θ)']
+legend_points = [f'θ_{int(np.round(z)):02d}={z:.2f}°' for z in zeros_H_deg] + [f'θ_m{int(np.round(m)):02d}={m:.2f}°' for m in maxes_H_deg]
+ax_H.legend(legend_labels + legend_points, loc='upper right')
+
+fig_H.savefig('APiK_lab3_var18_H_plane.png')
 
 plt.show()
